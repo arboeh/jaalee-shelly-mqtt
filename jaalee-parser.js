@@ -2,13 +2,59 @@
  * Jaalee JHT Parser for Shelly BLU Gateway with MQTT Home Assistant Integration
  * Parses iBeacon-format temperature and humidity data from Jaalee JHT sensors
  * and publishes to Home Assistant via MQTT Auto-Discovery
+ *
+ * Version: 1.1
+ * Repository: https://github.com/arboeh/jaalee-shelly-mqtt
  */
+
+/******************* LOGGING SYSTEM *******************/
+const LOG_LEVELS = {
+  ERROR: 0,
+  WARN: 1,
+  INFO: 2,
+  DEBUG: 3
+};
+
+// Logger configuration
+const LOGGER = {
+  level: LOG_LEVELS.INFO, // Will be set from CONFIG
+
+  error: function (message) {
+    if (this.level >= LOG_LEVELS.ERROR) {
+      console.log("[ERROR]", message);
+    }
+  },
+
+  warn: function (message) {
+    if (this.level >= LOG_LEVELS.WARN) {
+      console.log("[WARN]", message);
+    }
+  },
+
+  info: function (message) {
+    if (this.level >= LOG_LEVELS.INFO) {
+      console.log("[INFO]", message);
+    }
+  },
+
+  debug: function (message) {
+    if (this.level >= LOG_LEVELS.DEBUG) {
+      console.log("[DEBUG]", message);
+    }
+  }
+};
+/******************* END LOGGING *******************/
 
 /******************* CONFIGURATION *******************/
 const CONFIG = {
   eventName: "jaalee-jht",
   active: true, // Active scan required for Jaalee devices
-  debug: true,
+
+  // Log levels: ERROR=0, WARN=1, INFO=2, DEBUG=3
+  // INFO: Shows important events (sensor found, MQTT status, etc.)
+  // DEBUG: Shows all BLE scans and detailed information
+  logLevel: LOG_LEVELS.INFO,
+
   mqtt: {
     enabled: true,
     discovery_prefix: "homeassistant", // Standard HA Discovery Prefix
@@ -23,6 +69,9 @@ const CONFIG = {
     // "11:22:33:44:55:66": "Bedroom"
   }
 };
+
+// Apply log level from config
+LOGGER.level = CONFIG.logLevel;
 /******************* END CONFIGURATION *******************/
 
 // Jaalee-specific constants
@@ -32,7 +81,7 @@ const JAALEE_UUID_MARKER = [0xF5, 0x25];
 // Tracking for Discovery (publish only once per device)
 let discoveredDevices = {};
 
-// Helper: MAC address formatting for topics
+// Helper: MAC address formatting for topics (no RegEx, Shelly mJS compatible)
 function formatMacForTopic(mac) {
   if (!mac)
     return "";
@@ -48,7 +97,7 @@ function formatMacForTopic(mac) {
 // Helper: Get current timestamp in ISO format (UTC)
 function getTimestamp() {
   const now = new Date();
-  
+
   // Use built-in ISO string (always UTC)
   // Format: 2025-11-17T07:42:15.123Z
   return now.toISOString();
@@ -57,7 +106,7 @@ function getTimestamp() {
 // MQTT Discovery for Home Assistant
 function publishDiscovery(mac, friendlyName) {
   if (!MQTT.isConnected()) {
-    console.log("MQTT not connected, skipping discovery");
+    LOGGER.warn("MQTT not connected, skipping discovery");
     return;
   }
 
@@ -129,7 +178,7 @@ function publishDiscovery(mac, friendlyName) {
     0,
     true);
 
-  // RSSI Sensor Discovery
+  // RSSI Sensor Discovery (optional, disabled by default in HA)
   if (CONFIG.mqtt.publish_rssi) {
     const rssiConfig = {
       name: "Signal Strength",
@@ -151,7 +200,7 @@ function publishDiscovery(mac, friendlyName) {
       true);
   }
 
-  // Last Seen Sensor Discovery
+  // Last Seen Sensor Discovery (optional, disabled by default in HA)
   if (CONFIG.mqtt.publish_last_seen) {
     const lastSeenConfig = {
       name: "Last Seen",
@@ -171,13 +220,13 @@ function publishDiscovery(mac, friendlyName) {
       true);
   }
 
-  console.log("MQTT Discovery published for:", mac);
+  LOGGER.info("MQTT Discovery published for: " + mac);
 }
 
 // Publish Sensor Data to MQTT
 function publishSensorData(mac, data) {
   if (!MQTT.isConnected()) {
-    console.log("MQTT not connected, skipping publish");
+    LOGGER.warn("MQTT not connected, skipping publish");
     return;
   }
 
@@ -201,6 +250,7 @@ function publishSensorData(mac, data) {
   }
 
   MQTT.publish(stateTopic, JSON.stringify(payload), 0, false);
+  LOGGER.debug("Published sensor data to: " + stateTopic);
 }
 
 // Emit parsed data
@@ -208,14 +258,14 @@ function emitJaaleeData(data) {
   if (typeof data !== "object")
     return;
 
-  // Event emittieren
+  // Emit event for local use
   Shelly.emitEvent(CONFIG.eventName, data);
 
   // MQTT Publishing
   if (CONFIG.mqtt.enabled && data.address) {
     const friendlyName = CONFIG.knownDevices[data.address] || null;
 
-    // Discovery, push once
+    // Publish discovery once per device
     if (!discoveredDevices[data.address]) {
       publishDiscovery(data.address, friendlyName);
       discoveredDevices[data.address] = true;
@@ -226,7 +276,7 @@ function emitJaaleeData(data) {
   }
 }
 
-// Jaalee Decoder mit korrigiertem iBeacon-Parsing
+// Jaalee Decoder with corrected iBeacon parsing
 const JaaleeDecoder = {
   // Convert buffer to hex string for debugging
   bufferToHex: function (buffer) {
@@ -252,7 +302,8 @@ const JaaleeDecoder = {
       return null;
     }
 
-    // Jaalee UUID Check: Suche nach F5 25 irgendwo in der UUID (Bytes 2-17)
+    // Jaalee UUID Check: Search for F5 25 anywhere in UUID (bytes 2-17)
+    // Different firmware versions place the marker at different positions
     let hasJaaleeMarker = false;
     for (let i = 2; i < 17; i++) {
       if (data.at(i) === 0xF5 && data.at(i + 1) === 0x25) {
@@ -262,7 +313,7 @@ const JaaleeDecoder = {
     }
 
     if (!hasJaaleeMarker) {
-      // Kein Jaalee-Marker gefunden - skip dieses Gerät
+      // No Jaalee marker found - skip this device
       return null;
     }
 
@@ -277,7 +328,7 @@ const JaaleeDecoder = {
     // Extract battery (byte 23)
     const battery = data.at(23);
 
-    // Plausibilitäts-Check für Sensor-Werte
+    // Plausibility check for sensor values
     if (temperature < -40 || temperature > 80 || humidity < 0 || humidity > 100) {
       return null;
     }
@@ -315,9 +366,7 @@ const JaaleeDecoder = {
         }
       }
       if (!macMatch) {
-        if (CONFIG.debug) {
-          console.log("Jaalee: MAC address mismatch");
-        }
+        LOGGER.debug("Jaalee: MAC address mismatch");
         return null;
       }
     }
@@ -330,7 +379,7 @@ const JaaleeDecoder = {
     const humiRaw = this.getUInt16BE(data, data.length - 2);
     const humidity = Math.round((100 * humiRaw / 65535) * 100) / 100;
 
-    // Value checks
+    // Plausibility check
     if (temperature < -40 || temperature > 80 || humidity < 0 || humidity > 100) {
       return null;
     }
@@ -382,6 +431,9 @@ function JaaleeScanCallback(event, result) {
   if (!advData)
     return;
 
+  // Debug: Show all BLE devices
+  LOGGER.debug("BLE Device: " + result.addr + " RSSI: " + result.rssi + " Data length: " + advData.length);
+
   // Convert MAC address string to byte array
   let macBytes = null;
   if (result.addr) {
@@ -402,20 +454,15 @@ function JaaleeScanCallback(event, result) {
     parsed.address = result.addr;
     parsed.model = "Jaalee JHT";
 
-    if (CONFIG.debug) {
-      console.log("*** JAALEE JHT FOUND ***");
-      console.log("MAC:", result.addr);
-      console.log("Temperature:", parsed.temperature, "°C");
-      console.log("Humidity:", parsed.humidity, "%");
-      console.log("Battery:", parsed.battery, "%");
-      if (CONFIG.mqtt.publish_rssi) {
-        console.log("RSSI:", parsed.rssi, "dBm");
-      }
-      if (CONFIG.mqtt.publish_last_seen) {
-        console.log("Last Seen:", getTimestamp());
-      }
-      console.log("Format:", parsed.format);
-    }
+    // Info: Found Jaalee sensor
+    LOGGER.info("Jaalee JHT found - MAC: " + result.addr +
+      " | Temp: " + parsed.temperature + "°C" +
+      " | Humidity: " + parsed.humidity + "%");
+
+    // Debug: Detailed information
+    LOGGER.debug("Battery: " + parsed.battery + "% | " +
+      "RSSI: " + parsed.rssi + "dBm | " +
+      "Format: " + parsed.format);
 
     emitJaaleeData(parsed);
   }
@@ -424,29 +471,29 @@ function JaaleeScanCallback(event, result) {
 // Initialize the Jaalee parser
 function init() {
   if (typeof CONFIG === "undefined") {
-    console.log("Error: Undefined config");
+    LOGGER.error("Undefined config");
     return;
   }
 
   // Check if Bluetooth is enabled
   const BLEConfig = Shelly.getComponentConfig("ble");
   if (!BLEConfig.enable) {
-    console.log("Error: Bluetooth is not enabled");
+    LOGGER.error("Bluetooth is not enabled");
     return;
   }
 
   // Check MQTT connection if MQTT is enabled
   if (CONFIG.mqtt.enabled) {
     if (MQTT.isConnected()) {
-      console.log("MQTT connected");
+      LOGGER.info("MQTT connected");
     } else {
-      console.log("Warning: MQTT not connected - check MQTT settings");
+      LOGGER.warn("MQTT not connected - check MQTT settings");
     }
   }
 
   // Start BLE Scanner
   if (BLE.Scanner.isRunning()) {
-    console.log("Info: BLE scanner already running");
+    LOGGER.info("BLE scanner already running");
   } else {
     const bleScanner = BLE.Scanner.Start({
       duration_ms: BLE.Scanner.INFINITE_SCAN,
@@ -454,19 +501,22 @@ function init() {
     });
 
     if (!bleScanner) {
-      console.log("Error: Cannot start BLE scanner");
+      LOGGER.error("Cannot start BLE scanner");
       return;
     }
   }
 
   BLE.Scanner.Subscribe(JaaleeScanCallback);
 
-  if (!CONFIG.debug) {
-    console.log = function () {};
-  }
+  // Show startup info
+  const levelName = LOGGER.level === LOG_LEVELS.DEBUG ? "DEBUG" :
+    LOGGER.level === LOG_LEVELS.INFO ? "INFO" :
+    LOGGER.level === LOG_LEVELS.WARN ? "WARN" : "ERROR";
 
-  console.log("Jaalee JHT parser initialized");
-  console.log("Optional sensors - RSSI:", CONFIG.mqtt.publish_rssi, ", Last Seen:", CONFIG.mqtt.publish_last_seen);
+  LOGGER.info("Jaalee JHT parser initialized (v1.1)");
+  LOGGER.info("Log level: " + levelName);
+  LOGGER.info("Optional sensors - RSSI: " + CONFIG.mqtt.publish_rssi +
+    ", Last Seen: " + CONFIG.mqtt.publish_last_seen);
 }
 
 // Start the script
