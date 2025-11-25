@@ -4,14 +4,18 @@
  * Parses iBeacon-format temperature and humidity data from Jaalee JHT sensors
  * and publishes to Home Assistant via MQTT Auto-Discovery.
  *
- * @version     1.1.0
- * @date        2025-11-17
+ * @version     1.1.1
+ * @date        2025-11-25
  * @author      arboeh
  * @email       arend.boehmer@web.de
  * @license     MIT
  * @repository  https://github.com/arboeh/jaalee-shelly-mqtt
  *
  * Changelog:
+ *   v1.1.1 (2025-11-25)
+ *     - Fixed Array.reverse() compatibility issue with Shelly mJS
+ *     - Replaced reverse() call with manual loop in parseShortFormat
+ *
  *   v1.1.0 (2025-11-17)
  *     - Added configurable log levels (ERROR, WARN, INFO, DEBUG)
  *     - Fixed Last Seen timestamp format (ISO 8601 UTC)
@@ -71,7 +75,7 @@ const CONFIG = {
   // Log levels: ERROR=0, WARN=1, INFO=2, DEBUG=3
   // INFO: Shows important events (sensor found, MQTT status, etc.)
   // DEBUG: Shows all BLE scans and detailed information
-  logLevel: LOG_LEVELS.INFO,
+  logLevel: LOG_LEVELS.WARN,
 
   mqtt: {
     enabled: true,
@@ -86,9 +90,7 @@ const CONFIG = {
   },
   knownDevices: {
     // Optional: Format: "mac-address": "friendly_name"
-    // Examples:
-    // "aa:bb:cc:dd:ee:ff": "Living Room",
-    // "11:22:33:44:55:66": "Bedroom"
+    "c5:c7:14:4d:2b:35": "Jaalee JHT"
   }
 };
 
@@ -374,11 +376,11 @@ const JaaleeDecoder = {
     const battery = data.at(4);
 
     // Extract MAC address (bytes 5-10, reversed)
-    const macReversed = [];
-    for (let i = 5; i < 11; i++) {
-      macReversed.push(data.at(i));
+    // Manual reversal instead of .reverse()
+    const macAddress = [];
+    for (let i = 10; i >= 5; i--) {
+      macAddress.push(data.at(i));
     }
-    const macAddress = macReversed.reverse();
 
     // Verify MAC address if provided
     if (expectedMac && expectedMac.length === 6) {
