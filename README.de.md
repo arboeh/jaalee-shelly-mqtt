@@ -1,6 +1,8 @@
-# jaABlu | Jaalee JHT BLE → Home Assistant via Shelly BLU Gateway & MQTT
+# jaABlu
 
-## 🌐 [🇬🇪 Deutsche Version](README.de.md) | [🇬🇧 English Version](README.md)
+## Jaalee JHT BLE → Home Assistant via Shelly BLU Gateway & MQTT
+
+#### 🌐 [🇬🇪 Deutsche Version](README.de.md) | [🇬🇧 English Version](README.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Compatible-41BDF5.svg)](https://www.home-assistant.io/)
