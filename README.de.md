@@ -1,4 +1,4 @@
-# ja$\color{#d35400}{A}$$\color{#333333}{B}$lu
+# jaABlu
 
 ## Jaalee JHT BLE → Shelly BLU Gateway → Home Assistant MQTT + Auto Discovery
 
