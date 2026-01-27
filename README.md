@@ -1,24 +1,26 @@
-# jaABlu
+# ja$\color{#d35400}{A}$$\color{#333333}{B}$lu
 
-## Jaalee JHT BLE → Home Assistant via Shelly BLU Gateway & MQTT
+## Jaalee JHT BLE → Shelly BLU Gateway → Home Assistant MQTT + Auto Discovery
 
-#### 🌐 [🇩🇪 Deutsche Version](README.de.md) | [🇬🇧 English](README.md)
+#### 🌐 [🇩🇪 Deutsche Version](README.de.md) | [🇬🇧 English Version](README.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Compatible-41BDF5.svg)](https://www.home-assistant.io/)
 [![Shelly](https://img.shields.io/badge/Shelly-BLU%20Gateway-00A0E3.svg)](https://shelly.cloud/)
 [![Version](https://img.shields.io/github/v/release/arboeh/jaABlu?color=brightgreen)](https://github.com/arboeh/jaABlu/releases/latest)
 
-jaABlu script reads **Jaalee JHT** BLE temperature and humidity sensors using **Shelly BLU Gateway** devices as Bluetooth proxies and forwards the data to **Home Assistant** via **MQTT Auto-Discovery**.
+The jaABlu script reads **Jaalee JHT** BLE temperature and humidity sensors using **Shelly BLU Gateway** devices as Bluetooth proxies and forwards the data to **Home Assistant** via **MQTT Auto-Discovery**.
 
 ## Features
 
 - ✅ **Full MQTT Auto-Discovery support** – sensors are created automatically in Home Assistant
-- ✅ **5 sensor entities per device**: Temperature, Humidity, Battery, RSSI, Last Seen
+- ✅ **8 optional sensor entities per device**: Temperature, Humidity, Battery, RSSI, Last Seen, Link Quality, Battery Low Warning, Data Age
+- ✅ **Configurable temperature unit** – Celsius or Fahrenheit
 - ✅ **Online/Offline status** – automatic detection via configurable timeout (default 5 minutes)
 - ✅ **Multi-sensor support** – any number of Jaalee JHT sensors per Shelly BLU Gateway
 - ✅ **Configurable logging** – DEBUG / INFO / WARN / ERROR
 - ✅ **Active BLE scanning** – optimized for the Jaalee iBeacon format
+- ✅ **Optimized performance** – MQTT caching, helper functions, reduced code duplication
 
 ## Requirements
 
@@ -32,14 +34,14 @@ jaABlu script reads **Jaalee JHT** BLE temperature and humidity sensors using **
 
    In the web UI:
    - `Settings → Scripts → Add script`
-   - Paste the contents of `jaalee-parser.js`
+   - Paste the contents of `jaABlu.js`
    - Enable the script
 
 2. **Enable Bluetooth on the Shelly**
    - `Settings → Bluetooth → Enable`
 
 3. **Start the script**
-   - `Settings → Scripts → jaalee-parser.js → Start`
+   - `Settings → Scripts → jaABlu.js → Start`
    - Optionally enable autostart for the script
 
 4. **Verify in Home Assistant**
@@ -51,26 +53,103 @@ jaABlu script reads **Jaalee JHT** BLE temperature and humidity sensors using **
 
 The script can be configured through the `CONFIG` object:
 
-    const CONFIG = {
-        mqtt: {
-            publish_rssi: true, // Signal strength (dBm) as diagnostic entity
-            publish_last_seen: true, // Last seen timestamp (ISO 8601)
-            sensor_timeout: 300 // Seconds without update -> offline (default: 5 minutes)
-        },
-        knownDevices: {
-            "aa:bb:cc:dd:ee:ff": "Living Room" // Optional friendly names by MAC
-        }
-    };
+```javascript
+const CONFIG = {
+  // Temperature unit configuration
+  temperature: {
+    unit: 'celsius', // 'celsius' or 'fahrenheit'
+  },
+
+  mqtt: {
+    enabled: true,
+    discovery_prefix: 'homeassistant',
+    device_prefix: 'jaABlu',
+
+    // Optional diagnostic sensors (disabled by default)
+    publish_rssi: true, // Signal strength (RSSI in dBm)
+    publish_last_seen: true, // Last seen timestamp
+    publish_link_quality: false, // Link quality in % (0-100)
+    publish_battery_low: false, // Binary sensor for low battery warning
+    publish_data_age: false, // Age of last data in seconds
+
+    // Status & Timeout
+    sensor_timeout: 300, // Seconds without update -> offline (5 min)
+    timeout_check_interval: 120, // Check interval in seconds (2 min)
+    battery_low_threshold: 20, // Battery percentage threshold for warning
+  },
+
+  knownDevices: {
+    // Optional: Format: "mac-address": "friendly_name"
+    // 'XX:XX:XX:XX:XX:XX': 'Living Room',
+  },
+};
+```
 
 ## Home Assistant Entities
 
-| Entity                          | Type   | Device Class      | Default |
-| ------------------------------- | ------ | ----------------- | ------- |
-| `sensor.jaalee_xxx_temperature` | Sensor | `temperature`     | ✅      |
-| `sensor.jaalee_xxx_humidity`    | Sensor | `humidity`        | ✅      |
-| `sensor.jaalee_xxx_battery`     | Sensor | `battery`         | ✅      |
-| `sensor.jaalee_xxx_rssi`        | Sensor | `signal_strength` | 🔘      |
-| `sensor.jaalee_xxx_last_seen`   | Sensor | `timestamp`       | 🔘      |
+### Primary Sensors (always active)
+
+| Entity                          | Type   | Device Class  | Description            |
+| ------------------------------- | ------ | ------------- | ---------------------- |
+| `sensor.jaalee_xxx_temperature` | Sensor | `temperature` | Temperature (°C or °F) |
+| `sensor.jaalee_xxx_humidity`    | Sensor | `humidity`    | Humidity (%)           |
+| `sensor.jaalee_xxx_battery`     | Sensor | `battery`     | Battery level (%)      |
+
+### Optional Diagnostic Sensors (configurable)
+
+| Entity                                 | Type          | Device Class      | Default | Description            |
+| -------------------------------------- | ------------- | ----------------- | ------- | ---------------------- |
+| `sensor.jaalee_xxx_rssi`               | Sensor        | `signal_strength` | 🔘      | Signal strength (dBm)  |
+| `sensor.jaalee_xxx_last_seen`          | Sensor        | `timestamp`       | 🔘      | Last seen timestamp    |
+| `sensor.jaalee_xxx_link_quality`       | Sensor        | -                 | ⚪      | Connection quality (%) |
+| `binary_sensor.jaalee_xxx_battery_low` | Binary Sensor | `battery`         | ⚪      | Low battery warning    |
+| `sensor.jaalee_xxx_data_age`           | Sensor        | -                 | ⚪      | Age of last data (s)   |
+
+**Legend:**
+
+- ✅ = Always enabled
+- 🔘 = Enabled by default (configurable)
+- ⚪ = Disabled by default (can be enabled manually)
+
+## New Features in v1.3.0
+
+### Temperature Unit
+
+Choose between Celsius and Fahrenheit:
+
+```javascript
+temperature: {
+  unit: 'fahrenheit', // or 'celsius'
+}
+```
+
+### Link Quality
+
+RSSI is automatically converted to a user-friendly percentage display (0-100%):
+
+- 100% = Excellent signal (-30 dBm)
+- 0% = No usable signal (-90 dBm)
+
+### Battery Low Warning
+
+Binary sensor for automations on low battery:
+
+```yaml
+automation:
+  - alias: 'Low Battery Notification'
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.jaalee_xxx_battery_low
+        to: 'on'
+    action:
+      - service: notify.mobile_app
+        data:
+          message: 'Jaalee sensor battery is low!'
+```
+
+### Data Age
+
+Monitor the freshness of sensor data - useful for diagnostics and timeout monitoring.
 
 ## Troubleshooting
 
@@ -84,23 +163,39 @@ The script can be configured through the `CONFIG` object:
 
 - Increase log level to DEBUG in the script:
 
-        logLevel: LOG_LEVELS.DEBUG
+  ```javascript
+  logLevel: LOG_LEVELS.DEBUG;
+  ```
 
 - Use an MQTT tool (e.g. MQTT Explorer) to check for topics like
 
-        `homeassistant/sensor/jaalee_*/config`.
+  ```
+  homeassistant/sensor/jaABlu_*/config
+  ```
 
-## Logs (DEBUG mode)
+**❌ Sensor shows "Unavailable"**
 
-    [INFO] Jaalee JHT parser initialized (v1.2.1)
-    [INFO] MQTT connected
-    [INFO] Jaalee JHT found - MAC: c5:c7:14:4d:2b:35 | Temp: 21.5°C | Humidity: 52%
-    [INFO] MQTT Discovery published for: c5:c7:14:4d:2b:35
-    [WARN] Sensor timeout: c5:c7:14:4d:2b:35 (no data for 305s)
+- Check if the sensor is within Bluetooth range (Link Quality sensor can help)
+- Adjust timeout settings if sensors transmit less frequently
+- Data Age sensor shows how old the last data is
+
+## Logs (INFO mode)
+
+```
+[INFO] jaABlu v1.3.0: MQTT connected                                                                      08:58:43
+[INFO] jaABlu v1.3.0: BLE scanner already running                                                         08:58:43
+[INFO] jaABlu v1.3.0: Timeout monitoring started (interval: 120s)                                         08:58:43
+[INFO] jaABlu v1.3.0: jaABlu parser initialized (v1.3.0)                                                  08:58:43
+[INFO] jaABlu v1.3.0: Log level: INFO                                                                     08:58:43
+[INFO] jaABlu v1.3.0: Temperature unit: °C                                                                08:58:43
+[INFO] jaABlu v1.3.0: Optional sensors enabled: RSSI, Last Seen, Link Quality, Battery Low, Data Age      08:58:43
+[INFO] jaABlu v1.3.0: Jaalee JHT found - MAC: XX:XX:XX:XX:XX:XX | Temp: 0.58°C | Humidity: 92.01%         08:58:44
+[INFO] jaABlu v1.3.0: MQTT Discovery published for: XX:XX:XX:XX:XX:XX                                     08:58:52
+```
 
 ## License
 
-MIT License – see [LICENSE](LICENSE) © 2026 Arend Böhmer.
+MIT License – see [LICENSE](LICENSE) © 2026 Arend Böhmer
 
 ## Repository
 
