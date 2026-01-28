@@ -1,4 +1,4 @@
-<img src="jaABlu.svg" alt="jaABlu" height="40"/>
+<img src="logo.svg" alt="jaABlu" height="40"/>
 
 ### Jaalee JHT BLE → Shelly BLU Gateway → Home Assistant MQTT + Auto Discovery
 
