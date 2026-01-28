@@ -2,7 +2,7 @@
 
 ### Jaalee JHT BLE → Shelly BLU Gateway → Home Assistant MQTT + Auto Discovery
 
-🇬🇧 English | [🇩🇪 **Deutsch**](READMEokay.de.md)
+🇬🇧 English | [🇩🇪 **Deutsch**](README.de.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Compatible-41BDF5.svg)](https://www.home-assistant.io/)
